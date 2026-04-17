@@ -1,0 +1,154 @@
+---
+# Service Account and RBAC Role Generator
+# Creates ServiceAccounts, Roles (or ClusterRoles), and RoleBindings
+# for common use cases: read-only, deployer, admin, monitoring.
+#
+# Usage:
+#   ansible-playbook rbac-generator.yml -e "namespace=dev"
+#   ansible-playbook rbac-generator.yml -e "namespace=prod target_platform=openshift"
+#   ansible-playbook rbac-generator.yml -e "namespace=dev roles=['readonly','deployer']"
+
+- name: Generate Service Accounts and RBAC roles
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    namespace: "default"
+    target_platform: "kubernetes"
+    roles:
+      - readonly
+      - deployer
+      - admin
+      - monitoring
+
+    role_definitions:
+      readonly:
+        description: "Read-only access to pods, services, configmaps, and deployments"
+        rules:
+          - apiGroups: ["", "apps", "extensions"]
+            resources: ["pods", "services", "configmaps", "deployments", "replicasets", "statefulsets"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: [""]
+            resources: ["pods/log"]
+            verbs: ["get"]
+
+      deployer:
+        description: "Create, update, and delete deployments, services, and configmaps"
+        rules:
+          - apiGroups: ["", "apps"]
+            resources: ["deployments", "services", "configmaps", "secrets"]
+            verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+          - apiGroups: [""]
+            resources: ["pods", "pods/log"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["apps"]
+            resources: ["replicasets"]
+            verbs: ["get", "list", "watch"]
+
+      admin:
+        description: "Full access to all resources in the namespace"
+        rules:
+          - apiGroups: ["*"]
+            resources: ["*"]
+            verbs: ["*"]
+
+      monitoring:
+        description: "Read access to metrics, pods, events, and node info"
+        rules:
+          - apiGroups: [""]
+            resources: ["pods", "nodes", "services", "endpoints", "events"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["metrics.k8s.io"]
+            resources: ["pods", "nodes"]
+            verbs: ["get", "list"]
+          - apiGroups: [""]
+            resources: ["pods/log"]
+            verbs: ["get"]
+
+  tasks:
+    - name: Create ServiceAccounts
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: "sa-{{ item }}"
+            namespace: "{{ namespace }}"
+            labels:
+              role: "{{ item }}"
+              managed-by: ansible
+      loop: "{{ roles }}"
+
+    - name: Create Roles
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: "role-{{ item }}"
+            namespace: "{{ namespace }}"
+            labels:
+              role: "{{ item }}"
+              managed-by: ansible
+          rules: "{{ role_definitions[item].rules }}"
+      loop: "{{ roles }}"
+
+    - name: Create RoleBindings
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: "bind-{{ item }}"
+            namespace: "{{ namespace }}"
+            labels:
+              role: "{{ item }}"
+              managed-by: ansible
+          subjects:
+            - kind: ServiceAccount
+              name: "sa-{{ item }}"
+              namespace: "{{ namespace }}"
+          roleRef:
+            kind: Role
+            name: "role-{{ item }}"
+            apiGroup: rbac.authorization.k8s.io
+      loop: "{{ roles }}"
+
+    - name: Create OpenShift-specific RoleBindings
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: "bind-{{ item }}-oc"
+            namespace: "{{ namespace }}"
+            labels:
+              role: "{{ item }}"
+              managed-by: ansible
+          subjects:
+            - kind: ServiceAccount
+              name: "sa-{{ item }}"
+              namespace: "{{ namespace }}"
+          roleRef:
+            kind: ClusterRole
+            name: "{{ 'view' if item == 'readonly' else 'edit' if item == 'deployer' else 'admin' if item == 'admin' else 'view' }}"
+            apiGroup: rbac.authorization.k8s.io
+      loop: "{{ roles }}"
+      when: target_platform == "openshift"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "RBAC setup complete in namespace '{{ namespace }}'"
+          - ""
+          - "Created resources:"
+          - "{% for role in roles %}  ServiceAccount: sa-{{ role }}  |  Role: role-{{ role }}  |  Binding: bind-{{ role }}  ({{ role_definitions[role].description }})"
+          - "{% endfor %}"
+          - ""
+          - "Test access with:"
+          - "  kubectl auth can-i list pods --as=system:serviceaccount:{{ namespace }}:sa-readonly -n {{ namespace }}"

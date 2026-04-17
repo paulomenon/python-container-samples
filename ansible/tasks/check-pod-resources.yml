@@ -1,0 +1,47 @@
+---
+# Helper task file: checks a single pod's containers for resource issues.
+# Called by pod-resource-validator.yml via include_tasks.
+
+- name: Check containers in {{ pod.metadata.namespace }}/{{ pod.metadata.name }}
+  ansible.builtin.set_fact:
+    no_requests: >-
+      {{ no_requests + [pod.metadata.namespace + '/' + pod.metadata.name + '/' + item.name] }}
+  loop: "{{ pod.spec.containers }}"
+  when: item.resources is not defined or item.resources.requests is not defined
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Check limits in {{ pod.metadata.namespace }}/{{ pod.metadata.name }}
+  ansible.builtin.set_fact:
+    no_limits: >-
+      {{ no_limits + [pod.metadata.namespace + '/' + pod.metadata.name + '/' + item.name] }}
+  loop: "{{ pod.spec.containers }}"
+  when: item.resources is not defined or item.resources.limits is not defined
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Check CPU limits in {{ pod.metadata.namespace }}/{{ pod.metadata.name }}
+  ansible.builtin.set_fact:
+    over_cpu: >-
+      {{ over_cpu + [pod.metadata.namespace + '/' + pod.metadata.name + '/' + item.name + ' (limit: ' + item.resources.limits.cpu + ')'] }}
+  loop: "{{ pod.spec.containers }}"
+  when:
+    - item.resources is defined
+    - item.resources.limits is defined
+    - item.resources.limits.cpu is defined
+    - item.resources.limits.cpu | regex_replace('[m]', '') | int > (max_cpu | int * 1000) if 'm' in (item.resources.limits.cpu | string) else item.resources.limits.cpu | int > max_cpu | int
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Check memory limits in {{ pod.metadata.namespace }}/{{ pod.metadata.name }}
+  ansible.builtin.set_fact:
+    over_memory: >-
+      {{ over_memory + [pod.metadata.namespace + '/' + pod.metadata.name + '/' + item.name + ' (limit: ' + item.resources.limits.memory + ')'] }}
+  loop: "{{ pod.spec.containers }}"
+  when:
+    - item.resources is defined
+    - item.resources.limits is defined
+    - item.resources.limits.memory is defined
+    - item.resources.limits.memory | regex_replace('[GgMm]i?', '') | int > max_memory_gi | int
+  loop_control:
+    label: "{{ item.name }}"

@@ -1,0 +1,193 @@
+---
+# Multi-Environment Deployment Manifest Generator (Dev/Staging/Prod)
+# Generates Kubernetes/OpenShift Deployment, Service, and ConfigMap manifests
+# tailored per environment with different replicas, resources, and env vars.
+#
+# Usage:
+#   ansible-playbook multi-env-deployment-generator.yml
+#   ansible-playbook multi-env-deployment-generator.yml -e "app_name=myapi image=myregistry/myapi:v2"
+#   ansible-playbook multi-env-deployment-generator.yml -e "output_dir=./generated environments=['dev','prod']"
+
+- name: Generate multi-environment deployment manifests
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: "flask-web-api"
+    image: "flask-web-api:latest"
+    container_port: 5000
+    output_dir: "./generated-manifests"
+
+    environments:
+      dev:
+        replicas: 1
+        cpu_request: "100m"
+        memory_request: "128Mi"
+        cpu_limit: "500m"
+        memory_limit: "512Mi"
+        env_vars:
+          DEBUG: "true"
+          LOG_LEVEL: "debug"
+          DB_HOST: "db-dev.internal"
+
+      staging:
+        replicas: 2
+        cpu_request: "250m"
+        memory_request: "256Mi"
+        cpu_limit: "1"
+        memory_limit: "1Gi"
+        env_vars:
+          DEBUG: "false"
+          LOG_LEVEL: "info"
+          DB_HOST: "db-staging.internal"
+
+      prod:
+        replicas: 3
+        cpu_request: "500m"
+        memory_request: "512Mi"
+        cpu_limit: "2"
+        memory_limit: "2Gi"
+        env_vars:
+          DEBUG: "false"
+          LOG_LEVEL: "warning"
+          DB_HOST: "db-prod.internal"
+
+  tasks:
+    - name: Create output directory
+      ansible.builtin.file:
+        path: "{{ output_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create environment subdirectories
+      ansible.builtin.file:
+        path: "{{ output_dir }}/{{ item.key }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ environments | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Generate ConfigMap for each environment
+      ansible.builtin.copy:
+        content: |
+          ---
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: {{ app_name }}-config
+            namespace: {{ item.key }}
+            labels:
+              app: {{ app_name }}
+              environment: {{ item.key }}
+          data:
+          {% for k, v in item.value.env_vars.items() %}
+            {{ k }}: "{{ v }}"
+          {% endfor %}
+        dest: "{{ output_dir }}/{{ item.key }}/configmap.yml"
+        mode: "0644"
+      loop: "{{ environments | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Generate Deployment for each environment
+      ansible.builtin.copy:
+        content: |
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: {{ app_name }}
+            namespace: {{ item.key }}
+            labels:
+              app: {{ app_name }}
+              environment: {{ item.key }}
+          spec:
+            replicas: {{ item.value.replicas }}
+            selector:
+              matchLabels:
+                app: {{ app_name }}
+            template:
+              metadata:
+                labels:
+                  app: {{ app_name }}
+                  environment: {{ item.key }}
+              spec:
+                containers:
+                  - name: {{ app_name }}
+                    image: {{ image }}
+                    ports:
+                      - containerPort: {{ container_port }}
+                    resources:
+                      requests:
+                        cpu: "{{ item.value.cpu_request }}"
+                        memory: "{{ item.value.memory_request }}"
+                      limits:
+                        cpu: "{{ item.value.cpu_limit }}"
+                        memory: "{{ item.value.memory_limit }}"
+                    envFrom:
+                      - configMapRef:
+                          name: {{ app_name }}-config
+                    readinessProbe:
+                      httpGet:
+                        path: /health
+                        port: {{ container_port }}
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+                    livenessProbe:
+                      httpGet:
+                        path: /health
+                        port: {{ container_port }}
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+        dest: "{{ output_dir }}/{{ item.key }}/deployment.yml"
+        mode: "0644"
+      loop: "{{ environments | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Generate Service for each environment
+      ansible.builtin.copy:
+        content: |
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: {{ app_name }}
+            namespace: {{ item.key }}
+            labels:
+              app: {{ app_name }}
+              environment: {{ item.key }}
+          spec:
+            selector:
+              app: {{ app_name }}
+            ports:
+              - port: {{ container_port }}
+                targetPort: {{ container_port }}
+                protocol: TCP
+            type: ClusterIP
+        dest: "{{ output_dir }}/{{ item.key }}/service.yml"
+        mode: "0644"
+      loop: "{{ environments | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Display generated files
+      ansible.builtin.find:
+        paths: "{{ output_dir }}"
+        patterns: "*.yml"
+        recurse: true
+      register: generated_files
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "Generated {{ generated_files.matched }} manifest files for {{ environments | length }} environments"
+          - "Output directory: {{ output_dir }}"
+          - "Environments: {{ environments.keys() | list | join(', ') }}"
+          - ""
+          - "Deploy to a specific environment:"
+          - "  kubectl apply -f {{ output_dir }}/dev/"
+          - "  kubectl apply -f {{ output_dir }}/staging/"
+          - "  kubectl apply -f {{ output_dir }}/prod/"

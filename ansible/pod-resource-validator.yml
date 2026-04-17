@@ -1,0 +1,100 @@
+---
+# Pod Resource Limit Validator (CPU/Memory Checker)
+# Scans running pods and reports containers missing resource limits/requests,
+# or those exceeding defined thresholds.
+#
+# Usage:
+#   ansible-playbook pod-resource-validator.yml
+#   ansible-playbook pod-resource-validator.yml -e "target_namespace=prod max_cpu=2 max_memory_gi=4"
+
+- name: Validate pod resource limits and requests
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    target_namespace: ""
+    max_cpu: "4"
+    max_memory_gi: "8"
+
+  tasks:
+    - name: Get pods from all namespaces
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: "{{ target_namespace if target_namespace != '' else omit }}"
+      register: pod_list
+
+    - name: Analyze pod resource configurations
+      ansible.builtin.set_fact:
+        no_requests: []
+        no_limits: []
+        over_cpu: []
+        over_memory: []
+
+    - name: Check each pod for resource issues
+      ansible.builtin.include_tasks:
+        file: tasks/check-pod-resources.yml
+      loop: "{{ pod_list.resources }}"
+      loop_control:
+        loop_var: pod
+        label: "{{ pod.metadata.namespace }}/{{ pod.metadata.name }}"
+
+    - name: Report — Containers without resource requests
+      ansible.builtin.debug:
+        msg: |
+          MISSING RESOURCE REQUESTS ({{ no_requests | length }} containers):
+          {% for item in no_requests %}
+            - {{ item }}
+          {% endfor %}
+          {% if no_requests | length == 0 %}
+            All containers have resource requests set.
+          {% endif %}
+
+    - name: Report — Containers without resource limits
+      ansible.builtin.debug:
+        msg: |
+          MISSING RESOURCE LIMITS ({{ no_limits | length }} containers):
+          {% for item in no_limits %}
+            - {{ item }}
+          {% endfor %}
+          {% if no_limits | length == 0 %}
+            All containers have resource limits set.
+          {% endif %}
+
+    - name: Report — Containers exceeding CPU threshold ({{ max_cpu }} cores)
+      ansible.builtin.debug:
+        msg: |
+          OVER CPU LIMIT ({{ over_cpu | length }} containers):
+          {% for item in over_cpu %}
+            - {{ item }}
+          {% endfor %}
+          {% if over_cpu | length == 0 %}
+            No containers exceed the CPU threshold.
+          {% endif %}
+
+    - name: Report — Containers exceeding memory threshold ({{ max_memory_gi }}Gi)
+      ansible.builtin.debug:
+        msg: |
+          OVER MEMORY LIMIT ({{ over_memory | length }} containers):
+          {% for item in over_memory %}
+            - {{ item }}
+          {% endfor %}
+          {% if over_memory | length == 0 %}
+            No containers exceed the memory threshold.
+          {% endif %}
+
+    - name: Overall summary
+      ansible.builtin.debug:
+        msg:
+          - "Total pods scanned: {{ pod_list.resources | length }}"
+          - "Missing requests: {{ no_requests | length }}"
+          - "Missing limits: {{ no_limits | length }}"
+          - "Over CPU (>{{ max_cpu }}): {{ over_cpu | length }}"
+          - "Over memory (>{{ max_memory_gi }}Gi): {{ over_memory | length }}"
+
+    - name: Fail if violations found
+      ansible.builtin.fail:
+        msg: "Resource validation failed — see report above"
+      when: (no_requests | length > 0) or (no_limits | length > 0)
+      ignore_errors: true
