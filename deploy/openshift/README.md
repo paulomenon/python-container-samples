@@ -9,7 +9,7 @@ Every manifest includes these OpenShift resources:
 | Resource | Purpose |
 |---|---|
 | **ImageStream** | Stores built container images in the internal registry |
-| **BuildConfig** | Tells OpenShift to pull source code from GitHub and build with the Dockerfile |
+| **BuildConfig** | Tells OpenShift to pull source code from GitHub and build with the Containerfile |
 | **Deployment** | Runs the container, auto-redeploys when a new build completes |
 | **Service** | Internal networking (ClusterIP) |
 | **Route** | Exposes the app to the outside world with a URL |
@@ -61,7 +61,7 @@ oc get builds
 oc logs -f build/flask-web-api-1
 ```
 
-The build pulls source from `https://github.com/paulomenon/python-container-samples.git`, runs the Dockerfile from the app's folder, and pushes the image to the internal registry.
+The build pulls source from `https://github.com/paulomenon/python-container-samples.git`, runs the Containerfile from the app's folder, and pushes the image to the internal registry.
 
 ### Step 5: Check the deployment
 
@@ -271,7 +271,7 @@ oc expose svc auth-service-jwt
 |---|---|---|
 | **Best for** | Reproducible, version-controlled deployments | Quick prototyping and one-off deploys |
 | **Customization** | Full control — probes, env vars, scaling, volumes | Basic — add env vars with `-e`, limited config |
-| **Build method** | Dockerfile (you control the build) | S2I builder (OpenShift chooses how to build) |
+| **Build method** | Containerfile (you control the build) | S2I builder (OpenShift chooses how to build) |
 | **Multi-service** | Single YAML deploys everything together | Separate commands for each service |
 | **GitOps friendly** | Yes — YAML files live in your repo | No — configuration lives in the cluster |
 | **Rebuild** | `oc start-build <name>` | `oc start-build <name>` |
