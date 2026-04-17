@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-microservice
+  labels:
+    app: fastapi-microservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastapi-microservice
+  template:
+    metadata:
+      labels:
+        app: fastapi-microservice
+    spec:
+      containers:
+        - name: fastapi-microservice
+          image: fastapi-microservice:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-microservice
+  labels:
+    app: fastapi-microservice
+spec:
+  type: ClusterIP
+  selector:
+    app: fastapi-microservice
+  ports:
+    - port: 8000
+      targetPort: 8000

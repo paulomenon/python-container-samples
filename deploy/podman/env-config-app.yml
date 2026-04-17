@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  env-config-app:
+    build: ../../apps/env-config-app
+    ports:
+      - "5000:5000"
+    environment:
+      APP_NAME: env-config-app
+      APP_ENV: production
+      APP_DEBUG: "false"

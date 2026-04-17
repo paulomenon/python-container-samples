@@ -1,0 +1,7 @@
+version: "3.8"
+
+services:
+  flask-web-api:
+    build: ../../apps/flask-web-api
+    ports:
+      - "5000:5000"

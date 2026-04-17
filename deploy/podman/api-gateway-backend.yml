@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  gateway:
+    build: ../../apps/api-gateway-backend/gateway
+    ports:
+      - "8000:8000"
+    environment:
+      BACKEND_USERS_URL: http://backend-users:8001
+      BACKEND_PRODUCTS_URL: http://backend-products:8002
+
+  backend-users:
+    build: ../../apps/api-gateway-backend/backend-users
+    ports:
+      - "8001:8001"
+
+  backend-products:
+    build: ../../apps/api-gateway-backend/backend-products
+    ports:
+      - "8002:8002"

@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cache-service
+  labels:
+    app: redis-cache-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-cache-service
+      component: app
+  template:
+    metadata:
+      labels:
+        app: redis-cache-service
+        component: app
+    spec:
+      containers:
+        - name: redis-cache-service
+          image: redis-cache-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - name: REDIS_URL
+              value: redis://redis:6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cache-service-redis
+  labels:
+    app: redis-cache-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-cache-service
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: redis-cache-service
+        component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cache-service
+  labels:
+    app: redis-cache-service
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-cache-service
+    component: app
+  ports:
+    - port: 5000
+      targetPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    app: redis-cache-service
+spec:
+  type: ClusterIP
+  selector:
+    app: redis-cache-service
+    component: redis
+  ports:
+    - port: 6379
+      targetPort: 6379

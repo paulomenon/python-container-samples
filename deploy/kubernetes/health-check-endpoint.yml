@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-check-endpoint
+  labels:
+    app: health-check-endpoint
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: health-check-endpoint
+  template:
+    metadata:
+      labels:
+        app: health-check-endpoint
+    spec:
+      containers:
+        - name: health-check-endpoint
+          image: health-check-endpoint:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 5000
+            periodSeconds: 5
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-check-endpoint
+  labels:
+    app: health-check-endpoint
+spec:
+  type: ClusterIP
+  selector:
+    app: health-check-endpoint
+  ports:
+    - port: 5000
+      targetPort: 5000

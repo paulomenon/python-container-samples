@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: file-upload-service-uploads
+  labels:
+    app: file-upload-service
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-upload-service
+  labels:
+    app: file-upload-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: file-upload-service
+  template:
+    metadata:
+      labels:
+        app: file-upload-service
+    spec:
+      containers:
+        - name: file-upload-service
+          image: file-upload-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: file-upload-service-uploads
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: file-upload-service
+  labels:
+    app: file-upload-service
+spec:
+  type: ClusterIP
+  selector:
+    app: file-upload-service
+  ports:
+    - port: 5000
+      targetPort: 5000

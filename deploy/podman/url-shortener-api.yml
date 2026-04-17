@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  url-shortener-api:
+    build: ../../apps/url-shortener-api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./url-shortener-sqlite:/data
+    command:
+      [
+        "sh",
+        "-c",
+        "cd /data && PYTHONPATH=/app exec gunicorn -b 0.0.0.0:5000 app:app",
+      ]

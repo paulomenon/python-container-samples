@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  coordinator:
+    build: ../../apps/distributed-web-scraper/coordinator
+    ports:
+      - "5000:5000"
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+
+  worker:
+    build: ../../apps/distributed-web-scraper/worker
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine

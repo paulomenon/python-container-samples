@@ -1,0 +1,59 @@
+# Apply to your OpenShift project, for example:
+#   oc project <your-namespace>
+#   oc apply -f fastapi-microservice.yml
+# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-microservice
+  # namespace: <your-namespace>
+  labels:
+    app: fastapi-microservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastapi-microservice
+  template:
+    metadata:
+      labels:
+        app: fastapi-microservice
+    spec:
+      containers:
+        - name: fastapi-microservice
+          image: fastapi-microservice:latest
+          ports:
+            - name: http
+              containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-microservice
+  # namespace: <your-namespace>
+  labels:
+    app: fastapi-microservice
+spec:
+  type: ClusterIP
+  selector:
+    app: fastapi-microservice
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: fastapi-microservice
+  # namespace: <your-namespace>
+  labels:
+    app: fastapi-microservice
+spec:
+  to:
+    kind: Service
+    name: fastapi-microservice
+    weight: 100
+  port:
+    targetPort: http

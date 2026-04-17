@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  labels:
+    app: microservices-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: microservices-app
+      component: api-gateway
+  template:
+    metadata:
+      labels:
+        app: microservices-app
+        component: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: api-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - name: SERVICE_USER_URL
+              value: http://user-service:5001
+            - name: SERVICE_ORDER_URL
+              value: http://order-service:5002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  labels:
+    app: microservices-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: microservices-app
+      component: user-service
+  template:
+    metadata:
+      labels:
+        app: microservices-app
+        component: user-service
+    spec:
+      containers:
+        - name: user-service
+          image: user-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  labels:
+    app: microservices-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: microservices-app
+      component: order-service
+  template:
+    metadata:
+      labels:
+        app: microservices-app
+        component: order-service
+    spec:
+      containers:
+        - name: order-service
+          image: order-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5002
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  labels:
+    app: microservices-app
+spec:
+  type: ClusterIP
+  selector:
+    app: microservices-app
+    component: api-gateway
+  ports:
+    - port: 5000
+      targetPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  labels:
+    app: microservices-app
+spec:
+  type: ClusterIP
+  selector:
+    app: microservices-app
+    component: user-service
+  ports:
+    - port: 5001
+      targetPort: 5001
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  labels:
+    app: microservices-app
+spec:
+  type: ClusterIP
+  selector:
+    app: microservices-app
+    component: order-service
+  ports:
+    - port: 5002
+      targetPort: 5002

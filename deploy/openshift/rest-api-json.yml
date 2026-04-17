@@ -1,0 +1,59 @@
+# Apply to your OpenShift project, for example:
+#   oc project <your-namespace>
+#   oc apply -f rest-api-json.yml
+# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rest-api-json
+  # namespace: <your-namespace>
+  labels:
+    app: rest-api-json
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rest-api-json
+  template:
+    metadata:
+      labels:
+        app: rest-api-json
+    spec:
+      containers:
+        - name: rest-api-json
+          image: rest-api-json:latest
+          ports:
+            - name: http
+              containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rest-api-json
+  # namespace: <your-namespace>
+  labels:
+    app: rest-api-json
+spec:
+  type: ClusterIP
+  selector:
+    app: rest-api-json
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: rest-api-json
+  # namespace: <your-namespace>
+  labels:
+    app: rest-api-json
+spec:
+  to:
+    kind: Service
+    name: rest-api-json
+    weight: 100
+  port:
+    targetPort: http

@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  auth-service-jwt:
+    build: ../../apps/auth-service-jwt
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./auth-service-jwt-data:/app/data

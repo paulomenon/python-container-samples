@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logging-monitoring-app
+  labels:
+    app: logging-monitoring-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logging-monitoring-app
+  template:
+    metadata:
+      labels:
+        app: logging-monitoring-app
+    spec:
+      containers:
+        - name: logging-monitoring-app
+          image: logging-monitoring-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logging-monitoring-app
+  labels:
+    app: logging-monitoring-app
+spec:
+  type: ClusterIP
+  selector:
+    app: logging-monitoring-app
+  ports:
+    - port: 5000
+      targetPort: 5000

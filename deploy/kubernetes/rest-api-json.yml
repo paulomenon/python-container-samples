@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rest-api-json
+  labels:
+    app: rest-api-json
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rest-api-json
+  template:
+    metadata:
+      labels:
+        app: rest-api-json
+    spec:
+      containers:
+        - name: rest-api-json
+          image: rest-api-json:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rest-api-json
+  labels:
+    app: rest-api-json
+spec:
+  type: ClusterIP
+  selector:
+    app: rest-api-json
+  ports:
+    - port: 5000
+      targetPort: 5000

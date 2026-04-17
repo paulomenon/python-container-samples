@@ -1,0 +1,59 @@
+# Apply to your OpenShift project, for example:
+#   oc project <your-namespace>
+#   oc apply -f flask-web-api.yml
+# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-web-api
+  # namespace: <your-namespace>
+  labels:
+    app: flask-web-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-web-api
+  template:
+    metadata:
+      labels:
+        app: flask-web-api
+    spec:
+      containers:
+        - name: flask-web-api
+          image: flask-web-api:latest
+          ports:
+            - name: http
+              containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-web-api
+  # namespace: <your-namespace>
+  labels:
+    app: flask-web-api
+spec:
+  type: ClusterIP
+  selector:
+    app: flask-web-api
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: flask-web-api
+  # namespace: <your-namespace>
+  labels:
+    app: flask-web-api
+spec:
+  to:
+    kind: Service
+    name: flask-web-api
+    weight: 100
+  port:
+    targetPort: http

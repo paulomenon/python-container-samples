@@ -1,0 +1,7 @@
+version: "3.8"
+
+services:
+  rest-api-json:
+    build: ../../apps/rest-api-json
+    ports:
+      - "5000:5000"

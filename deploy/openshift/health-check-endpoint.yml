@@ -1,0 +1,67 @@
+# Apply to your OpenShift project, for example:
+#   oc project <your-namespace>
+#   oc apply -f health-check-endpoint.yml
+# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-check-endpoint
+  # namespace: <your-namespace>
+  labels:
+    app: health-check-endpoint
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: health-check-endpoint
+  template:
+    metadata:
+      labels:
+        app: health-check-endpoint
+    spec:
+      containers:
+        - name: health-check-endpoint
+          image: health-check-endpoint:latest
+          ports:
+            - name: http
+              containerPort: 5000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-check-endpoint
+  # namespace: <your-namespace>
+  labels:
+    app: health-check-endpoint
+spec:
+  type: ClusterIP
+  selector:
+    app: health-check-endpoint
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: health-check-endpoint
+  # namespace: <your-namespace>
+  labels:
+    app: health-check-endpoint
+spec:
+  to:
+    kind: Service
+    name: health-check-endpoint
+    weight: 100
+  port:
+    targetPort: http

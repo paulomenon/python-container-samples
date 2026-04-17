@@ -1,0 +1,7 @@
+version: "3.8"
+
+services:
+  health-check-endpoint:
+    build: ../../apps/health-check-endpoint
+    ports:
+      - "5000:5000"

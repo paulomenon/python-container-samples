@@ -1,0 +1,86 @@
+# Apply to your OpenShift project, for example:
+#   oc project <your-namespace>
+#   oc apply -f autoscaling-api.yml
+# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autoscaling-api
+  # namespace: <your-namespace>
+  labels:
+    app: autoscaling-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autoscaling-api
+  template:
+    metadata:
+      labels:
+        app: autoscaling-api
+    spec:
+      containers:
+        - name: autoscaling-api
+          image: autoscaling-api:latest
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            requests:
+              cpu: 100m
+            limits:
+              cpu: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autoscaling-api
+  # namespace: <your-namespace>
+  labels:
+    app: autoscaling-api
+spec:
+  type: ClusterIP
+  selector:
+    app: autoscaling-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: autoscaling-api
+  # namespace: <your-namespace>
+  labels:
+    app: autoscaling-api
+spec:
+  to:
+    kind: Service
+    name: autoscaling-api
+    weight: 100
+  port:
+    targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: autoscaling-api
+  # namespace: <your-namespace>
+  labels:
+    app: autoscaling-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: autoscaling-api
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50

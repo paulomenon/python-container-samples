@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-web-api
+  labels:
+    app: flask-web-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flask-web-api
+  template:
+    metadata:
+      labels:
+        app: flask-web-api
+    spec:
+      containers:
+        - name: flask-web-api
+          image: flask-web-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-web-api
+  labels:
+    app: flask-web-api
+spec:
+  type: ClusterIP
+  selector:
+    app: flask-web-api
+  ports:
+    - port: 5000
+      targetPort: 5000

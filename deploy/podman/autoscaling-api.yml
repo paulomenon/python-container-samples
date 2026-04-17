@@ -1,0 +1,7 @@
+version: "3.8"
+
+services:
+  autoscaling-api:
+    build: ../../apps/autoscaling-api
+    ports:
+      - "8000:8000"

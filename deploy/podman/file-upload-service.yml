@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  file-upload-service:
+    build: ../../apps/file-upload-service
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
