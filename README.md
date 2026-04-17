@@ -4,50 +4,30 @@ A collection of containerized Python applications — from simple Flask APIs to 
 
 ## Examples
 
-### Starter (Green)
-
-| Folder | Example | Description |
+| Level | Examples | Description |
 |---|---|---|
-| `apps/flask-web-api/` | Simple Flask Web API | Basic REST API with Flask |
-| `apps/fastapi-microservice/` | FastAPI Microservice | Async API with FastAPI and auto-generated docs |
-| `apps/rest-api-json/` | REST API with JSON Responses | CRUD operations returning JSON |
-| `apps/health-check-endpoint/` | Health Check Endpoint | App with `/health` and `/ready` endpoints |
-| `apps/env-config-app/` | Environment Variable Config App | App configured entirely via environment variables |
+| [**Starter**](apps/starter/) | 5 apps | Flask API, FastAPI, REST API, Health Checks, Env Config |
+| [**Intermediate**](apps/intermediate/) | 5 apps | URL Shortener, Task Queue, File Upload, Logging, Redis Cache |
+| [**Advanced**](apps/advanced/) | 6 apps | Microservices, API Gateway, Event-driven, Autoscaling, Scraper, JWT Auth |
 
-### Intermediate (Yellow)
-
-| Folder | Example | Description |
-|---|---|---|
-| `apps/url-shortener-api/` | URL Shortener API | Shorten URLs with SQLite persistence |
-| `apps/task-queue-worker/` | Task Queue Worker | Background job processing with Redis + RQ |
-| `apps/file-upload-service/` | File Upload Service | Upload and retrieve files via API |
-| `apps/logging-monitoring-app/` | Logging + Monitoring Demo | Structured logging with Prometheus metrics |
-| `apps/redis-cache-service/` | Redis-backed Cache Service | API with Redis caching layer |
-
-### Advanced (Red)
-
-| Folder | Example | Description |
-|---|---|---|
-| `apps/microservices-app/` | Microservices App | Multiple Python services communicating via REST |
-| `apps/api-gateway-backend/` | API Gateway + Backend Services | Gateway routing to backend microservices |
-| `apps/event-driven-system/` | Event-driven System | Producer/consumer with Redis Pub/Sub |
-| `apps/autoscaling-api/` | Autoscaling API | CPU-intensive endpoint for HPA scaling demo |
-| `apps/distributed-web-scraper/` | Distributed Web Scraper | Coordinator + worker pattern for parallel scraping |
-| `apps/auth-service-jwt/` | Authentication Service | JWT-based auth with login, register, and protected routes |
+See each level's README for the full list and details.
 
 ## Project Structure
 
 ```
 python_container_samples/
 ├── apps/                      # All Python applications
+│   ├── starter/README.md      # Starter examples overview
+│   ├── intermediate/README.md # Intermediate examples overview
+│   ├── advanced/README.md     # Advanced examples overview
 │   ├── flask-web-api/         # Each app has its own folder with:
 │   │   ├── app.py             #   - Python source code
 │   │   ├── requirements.txt   #   - Dependencies
-│   │   └── Dockerfile         #   - Container build file
+│   │   └── Containerfile      #   - Container build file
 │   └── ...
 ├── deploy/                    # Deployment configurations
 │   ├── podman/                #   - Podman Compose files
-│   ├── openshift/             #   - OpenShift templates and manifests
+│   ├── openshift/             #   - OpenShift manifests + deployment guide
 │   └── kubernetes/            #   - Kubernetes YAML manifests
 └── README.md
 ```
@@ -60,7 +40,7 @@ python_container_samples/
 
 All examples use the official Python slim image as the base:
 
-```dockerfile
+```
 FROM python:3.12-slim
 ```
 
@@ -72,7 +52,7 @@ This keeps container images small (~150MB) while including everything Python nee
 
 ### What is Podman?
 
-Podman is a daemonless container engine — a drop-in replacement for Docker that runs containers without root privileges.
+Podman is a daemonless container engine that runs containers without root privileges. It is OCI-compliant and works with standard Containerfiles.
 
 ### Install Podman Desktop
 
@@ -174,30 +154,25 @@ oc whoami
 
 ### Deploying an Example to OpenShift
 
-**Option A: Deploy from source (S2I — no Dockerfile needed)**
+See the full [OpenShift Deployment Guide](deploy/openshift/README.md) for YAML-based and S2I deployment instructions.
+
+**Quick start with S2I (no Containerfile needed):**
 
 ```bash
 oc new-project python-samples
-oc new-app python:3.12-ubi9~https://github.com/YOUR_USER/python_container_samples \
+oc new-app python:3.12-ubi9~https://github.com/paulomenon/python-container-samples.git \
     --context-dir=apps/flask-web-api \
     --name=flask-web-api
 oc expose service flask-web-api
 oc get route flask-web-api
 ```
 
-**Option B: Deploy using YAML manifests**
+**Quick start with YAML manifests:**
 
 ```bash
 oc apply -f deploy/openshift/flask-web-api.yml
-oc get pods
+oc start-build flask-web-api
 oc get route flask-web-api
-```
-
-**View logs and status:**
-
-```bash
-oc logs -f deployment/flask-web-api
-oc get all -l app=flask-web-api
 ```
 
 ---
@@ -227,10 +202,6 @@ KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --name python-samples
 brew install minikube            # macOS
 minikube start --driver=podman
 ```
-
-**Option C: Docker Desktop (built-in K8s)**
-
-Enable Kubernetes in Docker Desktop settings → Kubernetes → Enable Kubernetes.
 
 ### Free Cloud Kubernetes (No Credit Card)
 

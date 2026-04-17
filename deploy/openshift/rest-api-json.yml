@@ -1,13 +1,45 @@
-# Apply to your OpenShift project, for example:
-#   oc project <your-namespace>
-#   oc apply -f rest-api-json.yml
-# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+# Deploy with:
+#   oc new-project python-samples    (if needed)
+#   oc apply -f <filename>.yml
+#   oc start-build <app-name>        (trigger the first build)
+#   oc get builds                    (watch build progress)
+#   oc get route <app-name>          (get the URL)
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: rest-api-json
+  labels:
+    app: rest-api-json
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: rest-api-json
+  labels:
+    app: rest-api-json
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/rest-api-json
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: rest-api-json:latest
+  triggers:
+    - type: ConfigChange
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rest-api-json
-  # namespace: <your-namespace>
   labels:
     app: rest-api-json
 spec:
@@ -19,10 +51,13 @@ spec:
     metadata:
       labels:
         app: rest-api-json
+      annotations:
+        image.openshift.io/triggers: >-
+          [{"from":{"kind":"ImageStreamTag","name":"rest-api-json:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"rest-api-json\")].image"}]
     spec:
       containers:
         - name: rest-api-json
-          image: rest-api-json:latest
+          image: image-registry.openshift-image-registry.svc:5000/python-samples/rest-api-json:latest
           ports:
             - name: http
               containerPort: 5000
@@ -31,7 +66,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: rest-api-json
-  # namespace: <your-namespace>
   labels:
     app: rest-api-json
 spec:
@@ -47,7 +81,6 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: rest-api-json
-  # namespace: <your-namespace>
   labels:
     app: rest-api-json
 spec:

@@ -1,15 +1,113 @@
-# Apply to your OpenShift project, for example:
-#   oc project <your-namespace>
+# Deploy with:
+#   oc new-project python-samples    (if needed)
 #   oc apply -f microservices-app.yml
-# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+#   oc start-build api-gateway
+#   oc start-build user-service
+#   oc start-build order-service
+#   oc get builds                    (watch build progress)
+#   oc get route                     (get the URL)
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: api-gateway
+  labels:
+    app: microservices-app
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: user-service
+  labels:
+    app: microservices-app
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: order-service
+  labels:
+    app: microservices-app
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: api-gateway
+  labels:
+    app: microservices-app
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/microservices-app/api-gateway
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: api-gateway:latest
+  triggers:
+    - type: ConfigChange
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: user-service
+  labels:
+    app: microservices-app
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/microservices-app/user-service
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: user-service:latest
+  triggers:
+    - type: ConfigChange
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: order-service
+  labels:
+    app: microservices-app
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/microservices-app/order-service
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: order-service:latest
+  triggers:
+    - type: ConfigChange
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-gateway
-  # namespace: <your-namespace>
   labels:
     app: microservices-app
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"api-gateway:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"api-gateway\")].image"}]'
 spec:
   replicas: 1
   selector:
@@ -38,7 +136,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: api-gateway
-  # namespace: <your-namespace>
   labels:
     app: microservices-app
 spec:
@@ -55,7 +152,6 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: api-gateway
-  # namespace: <your-namespace>
   labels:
     app: microservices-app
 spec:
@@ -70,9 +166,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: user-service
-  # namespace: <your-namespace>
   labels:
     app: microservices-app
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"user-service:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"user-service\")].image"}]'
 spec:
   replicas: 1
   selector:
@@ -96,7 +193,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: user-service
-  # namespace: <your-namespace>
   labels:
     app: microservices-app
 spec:
@@ -113,9 +209,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: order-service
-  # namespace: <your-namespace>
   labels:
     app: microservices-app
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"order-service:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"order-service\")].image"}]'
 spec:
   replicas: 1
   selector:
@@ -139,7 +236,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: order-service
-  # namespace: <your-namespace>
   labels:
     app: microservices-app
 spec:
