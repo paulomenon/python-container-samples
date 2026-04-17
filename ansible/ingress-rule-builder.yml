@@ -1,0 +1,173 @@
+---
+# Ingress Rule Builder for Multi-Service Routing
+# Generates Kubernetes Ingress or OpenShift Route resources for path-based
+# and host-based routing across multiple services.
+#
+# Usage:
+#   ansible-playbook ingress-rule-builder.yml
+#   ansible-playbook ingress-rule-builder.yml -e "target_platform=openshift"
+#   ansible-playbook ingress-rule-builder.yml -e "domain=myapps.example.com tls_enabled=true"
+
+- name: Build Ingress rules for multi-service routing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    target_platform: "kubernetes"
+    domain: "apps.example.com"
+    tls_enabled: true
+    tls_secret_name: "apps-tls-secret"
+    ingress_class: "nginx"
+    namespace: "default"
+
+    services:
+      - name: flask-web-api
+        host: "api.{{ domain }}"
+        path: /
+        port: 5000
+
+      - name: fastapi-microservice
+        host: "fastapi.{{ domain }}"
+        path: /
+        port: 8000
+
+      - name: auth-service-jwt
+        host: "auth.{{ domain }}"
+        path: /
+        port: 8000
+
+      - name: health-check-endpoint
+        host: "{{ domain }}"
+        path: /health
+        port: 5000
+
+      - name: url-shortener-api
+        host: "{{ domain }}"
+        path: /s
+        port: 5000
+
+      - name: file-upload-service
+        host: "{{ domain }}"
+        path: /upload
+        port: 5000
+
+      - name: logging-monitoring-app
+        host: "monitoring.{{ domain }}"
+        path: /
+        port: 5000
+
+  tasks:
+    # --- Kubernetes Ingress ---
+
+    - name: Group services by host
+      ansible.builtin.set_fact:
+        hosts_map: >-
+          {{
+            services
+            | groupby('host')
+            | items2dict(key_name=0, value_name=1)
+          }}
+      when: target_platform == "kubernetes"
+
+    - name: Create Kubernetes Ingress
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: "app-ingress"
+            namespace: "{{ namespace }}"
+            labels:
+              managed-by: ansible
+            annotations:
+              kubernetes.io/ingress.class: "{{ ingress_class }}"
+              nginx.ingress.kubernetes.io/ssl-redirect: "{{ 'true' if tls_enabled else 'false' }}"
+              nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+          spec:
+            tls: >-
+              {{
+                [{'hosts': hosts_map.keys() | list, 'secretName': tls_secret_name}]
+                if tls_enabled else omit
+              }}
+            rules: >-
+              [
+                {% for host, svcs in hosts_map.items() %}
+                {
+                  "host": "{{ host }}",
+                  "http": {
+                    "paths": [
+                      {% for svc in svcs %}
+                      {
+                        "path": "{{ svc.path }}",
+                        "pathType": "Prefix",
+                        "backend": {
+                          "service": {
+                            "name": "{{ svc.name }}",
+                            "port": {"number": {{ svc.port }}}
+                          }
+                        }
+                      }{% if not loop.last %},{% endif %}
+                      {% endfor %}
+                    ]
+                  }
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+              ]
+      when: target_platform == "kubernetes"
+
+    # --- OpenShift Routes ---
+
+    - name: Create OpenShift Routes
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: "{{ item.name }}-route"
+            namespace: "{{ namespace }}"
+            labels:
+              app: "{{ item.name }}"
+              managed-by: ansible
+          spec:
+            host: "{{ item.host }}"
+            path: "{{ item.path if item.path != '/' else omit }}"
+            to:
+              kind: Service
+              name: "{{ item.name }}"
+              weight: 100
+            port:
+              targetPort: "{{ item.port }}"
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+      loop: "{{ services }}"
+      loop_control:
+        label: "{{ item.name }} → {{ item.host }}{{ item.path }}"
+      when: target_platform == "openshift"
+
+    - name: Display routing table
+      ansible.builtin.debug:
+        msg: |
+          ROUTING TABLE ({{ target_platform }}):
+          ┌─────────────────────────────┬─────────────────────────────┬───────┬──────┐
+          │ Service                     │ Host                        │ Path  │ Port │
+          ├─────────────────────────────┼─────────────────────────────┼───────┼──────┤
+          {% for svc in services %}
+          │ {{ "%-27s" | format(svc.name) }} │ {{ "%-27s" | format(svc.host) }} │ {{ "%-5s" | format(svc.path) }} │ {{ "%-4s" | format(svc.port) }} │
+          {% endfor %}
+          └─────────────────────────────┴─────────────────────────────┴───────┴──────┘
+
+          {% if target_platform == 'kubernetes' %}
+          TLS: {{ 'Enabled (secret: ' + tls_secret_name + ')' if tls_enabled else 'Disabled' }}
+          Ingress class: {{ ingress_class }}
+          {% else %}
+          TLS: Edge termination with redirect
+          {% endif %}
+
+          Test with:
+          {% for svc in services %}
+            curl {{ 'https' if tls_enabled else 'http' }}://{{ svc.host }}{{ svc.path }}
+          {% endfor %}

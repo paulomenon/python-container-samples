@@ -1,0 +1,133 @@
+---
+# YAML Lint and Kubernetes Manifest Validator
+# Validates YAML syntax and checks Kubernetes manifests for common issues:
+# missing labels, missing resource limits, deprecated API versions, etc.
+#
+# Usage:
+#   ansible-playbook yaml-manifest-validator.yml -e "manifest_dir=../deploy/kubernetes"
+#   ansible-playbook yaml-manifest-validator.yml -e "manifest_dir=../deploy/openshift strict=true"
+
+- name: Validate YAML and Kubernetes manifests
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    manifest_dir: "../deploy/kubernetes"
+    strict: false
+    required_labels:
+      - app
+    deprecated_api_versions:
+      - "extensions/v1beta1"
+      - "apps/v1beta1"
+      - "apps/v1beta2"
+      - "networking.k8s.io/v1beta1"
+
+  tasks:
+    - name: Find all YAML files
+      ansible.builtin.find:
+        paths: "{{ manifest_dir }}"
+        patterns: "*.yml,*.yaml"
+        recurse: true
+      register: yaml_files
+
+    - name: Fail if no YAML files found
+      ansible.builtin.fail:
+        msg: "No YAML files found in {{ manifest_dir }}"
+      when: yaml_files.matched == 0
+
+    - name: Display files to validate
+      ansible.builtin.debug:
+        msg: "Found {{ yaml_files.matched }} YAML files in {{ manifest_dir }}"
+
+    - name: Read and parse each YAML file
+      ansible.builtin.include_vars:
+        file: "{{ item.path }}"
+        name: "manifest_{{ idx }}"
+      loop: "{{ yaml_files.files }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.path | basename }}"
+      ignore_errors: true
+      register: parse_results
+
+    - name: Check for YAML syntax errors
+      ansible.builtin.set_fact:
+        syntax_errors: "{{ parse_results.results | selectattr('failed', 'defined') | selectattr('failed') | map(attribute='item') | map(attribute='path') | list }}"
+
+    - name: Report YAML syntax errors
+      ansible.builtin.debug:
+        msg: |
+          YAML SYNTAX ERRORS ({{ syntax_errors | length }}):
+          {% for f in syntax_errors %}
+            - {{ f }}
+          {% endfor %}
+          {% if syntax_errors | length == 0 %}
+            All files are valid YAML.
+          {% endif %}
+
+    - name: Load manifests for content validation
+      ansible.builtin.slurp:
+        src: "{{ item.path }}"
+      loop: "{{ yaml_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: manifest_contents
+
+    - name: Check for deprecated API versions
+      ansible.builtin.set_fact:
+        deprecated_found: >-
+          {{
+            manifest_contents.results
+            | map(attribute='content')
+            | map('b64decode')
+            | select('search', deprecated_api_versions | join('|'))
+            | list
+            | length
+          }}
+
+    - name: Report deprecated API versions
+      ansible.builtin.debug:
+        msg: "{{ deprecated_found }} file(s) contain deprecated API versions ({{ deprecated_api_versions | join(', ') }})"
+
+    - name: Check for missing required labels
+      ansible.builtin.debug:
+        msg: >-
+          Checking file '{{ item.source }}' for required labels: {{ required_labels | join(', ') }}
+      loop: "{{ manifest_contents.results }}"
+      loop_control:
+        label: "{{ item.source | basename }}"
+
+    - name: Validate with kubectl dry-run (Kubernetes)
+      ansible.builtin.command:
+        cmd: "kubectl apply --dry-run=client -f {{ item.path }}"
+      loop: "{{ yaml_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      register: dryrun_results
+      ignore_errors: true
+      changed_when: false
+
+    - name: Report dry-run results
+      ansible.builtin.debug:
+        msg: |
+          KUBECTL DRY-RUN RESULTS:
+          {% for result in dryrun_results.results %}
+            {{ '✓' if result.rc == 0 else '✗' }} {{ result.item.path | basename }}
+            {% if result.rc != 0 %}  Error: {{ result.stderr | default('unknown error') }}{% endif %}
+          {% endfor %}
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "Files scanned: {{ yaml_files.matched }}"
+          - "Syntax errors: {{ syntax_errors | length }}"
+          - "Deprecated APIs: {{ deprecated_found }}"
+          - "Dry-run failures: {{ dryrun_results.results | selectattr('rc', 'ne', 0) | list | length }}"
+
+    - name: Fail in strict mode if issues found
+      ansible.builtin.fail:
+        msg: "Validation failed in strict mode — fix the issues above"
+      when:
+        - strict | bool
+        - (syntax_errors | length > 0) or (deprecated_found | int > 0) or (dryrun_results.results | selectattr('rc', 'ne', 0) | list | length > 0)

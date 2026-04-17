@@ -1,0 +1,129 @@
+---
+# Kubernetes Namespace Auto-Provisioning
+# Creates namespaces with labels, resource quotas, and limit ranges.
+# Works with both Kubernetes (kubectl) and OpenShift (oc).
+#
+# Usage:
+#   ansible-playbook namespace-auto-provisioning.yml -e "target_platform=kubernetes"
+#   ansible-playbook namespace-auto-provisioning.yml -e "target_platform=openshift"
+
+- name: Auto-provision Kubernetes / OpenShift namespaces
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    target_platform: kubernetes
+    namespaces:
+      - name: dev
+        labels:
+          environment: development
+          team: backend
+        resource_quota:
+          cpu: "4"
+          memory: "8Gi"
+          pods: "20"
+        limit_range:
+          default_cpu: "500m"
+          default_memory: "512Mi"
+          max_cpu: "2"
+          max_memory: "2Gi"
+
+      - name: staging
+        labels:
+          environment: staging
+          team: backend
+        resource_quota:
+          cpu: "8"
+          memory: "16Gi"
+          pods: "40"
+        limit_range:
+          default_cpu: "500m"
+          default_memory: "512Mi"
+          max_cpu: "2"
+          max_memory: "4Gi"
+
+      - name: prod
+        labels:
+          environment: production
+          team: backend
+        resource_quota:
+          cpu: "16"
+          memory: "32Gi"
+          pods: "100"
+        limit_range:
+          default_cpu: "1"
+          default_memory: "1Gi"
+          max_cpu: "4"
+          max_memory: "8Gi"
+
+  tasks:
+    - name: Validate target platform
+      ansible.builtin.assert:
+        that: target_platform in ['kubernetes', 'openshift']
+        fail_msg: "target_platform must be 'kubernetes' or 'openshift'"
+
+    - name: Create namespaces
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: "{{ 'Project' if target_platform == 'openshift' else 'Namespace' }}"
+          metadata:
+            name: "{{ item.name }}"
+            labels: "{{ item.labels }}"
+      loop: "{{ namespaces }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Apply resource quotas
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ResourceQuota
+          metadata:
+            name: "{{ item.name }}-quota"
+            namespace: "{{ item.name }}"
+          spec:
+            hard:
+              requests.cpu: "{{ item.resource_quota.cpu }}"
+              requests.memory: "{{ item.resource_quota.memory }}"
+              limits.cpu: "{{ item.resource_quota.cpu }}"
+              limits.memory: "{{ item.resource_quota.memory }}"
+              pods: "{{ item.resource_quota.pods }}"
+      loop: "{{ namespaces }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Apply limit ranges
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: LimitRange
+          metadata:
+            name: "{{ item.name }}-limits"
+            namespace: "{{ item.name }}"
+          spec:
+            limits:
+              - type: Container
+                default:
+                  cpu: "{{ item.limit_range.default_cpu }}"
+                  memory: "{{ item.limit_range.default_memory }}"
+                defaultRequest:
+                  cpu: "{{ item.limit_range.default_cpu }}"
+                  memory: "{{ item.limit_range.default_memory }}"
+                max:
+                  cpu: "{{ item.limit_range.max_cpu }}"
+                  memory: "{{ item.limit_range.max_memory }}"
+      loop: "{{ namespaces }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Display provisioned namespaces
+      ansible.builtin.debug:
+        msg: "Namespace '{{ item.name }}' provisioned — quota: {{ item.resource_quota.cpu }} CPU / {{ item.resource_quota.memory }} memory, {{ item.resource_quota.pods }} pods max"
+      loop: "{{ namespaces }}"
+      loop_control:
+        label: "{{ item.name }}"
