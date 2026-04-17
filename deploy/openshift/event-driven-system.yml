@@ -1,100 +1,77 @@
-# Apply to your OpenShift project, for example:
-#   oc project <your-namespace>
+# Deploy with:
+#   oc new-project python-samples    (if needed)
 #   oc apply -f event-driven-system.yml
-# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+#   oc start-build producer
+#   oc start-build consumer
+#   oc get builds                    (watch build progress)
+#   oc get route                     (get the URL)
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: image.openshift.io/v1
+kind: ImageStream
 metadata:
   name: producer
-  # namespace: <your-namespace>
   labels:
     app: event-driven-system
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: event-driven-system
-      component: producer
-  template:
-    metadata:
-      labels:
-        app: event-driven-system
-        component: producer
-    spec:
-      containers:
-        - name: producer
-          image: event-driven-system-producer:latest
-          ports:
-            - name: http
-              containerPort: 5000
-          env:
-            - name: REDIS_URL
-              value: redis://redis:6379/0
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: producer
-  # namespace: <your-namespace>
-  labels:
-    app: event-driven-system
-spec:
-  type: ClusterIP
-  selector:
-    app: event-driven-system
-    component: producer
-  ports:
-    - name: http
-      port: 5000
-      targetPort: http
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: producer
-  # namespace: <your-namespace>
-  labels:
-    app: event-driven-system
-spec:
-  to:
-    kind: Service
-    name: producer
-    weight: 100
-  port:
-    targetPort: http
----
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: image.openshift.io/v1
+kind: ImageStream
 metadata:
   name: consumer
-  # namespace: <your-namespace>
+  labels:
+    app: event-driven-system
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: producer
   labels:
     app: event-driven-system
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: event-driven-system
-      component: consumer
-  template:
-    metadata:
-      labels:
-        app: event-driven-system
-        component: consumer
-    spec:
-      containers:
-        - name: consumer
-          image: event-driven-system-consumer:latest
-          env:
-            - name: REDIS_URL
-              value: redis://redis:6379/0
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/event-driven-system/producer
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: producer:latest
+  triggers:
+    - type: ConfigChange
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: consumer
+  labels:
+    app: event-driven-system
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/event-driven-system/consumer
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: consumer:latest
+  triggers:
+    - type: ConfigChange
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  # namespace: <your-namespace>
   labels:
     app: event-driven-system
 spec:
@@ -120,7 +97,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  # namespace: <your-namespace>
   labels:
     app: event-driven-system
 spec:
@@ -132,3 +108,90 @@ spec:
     - name: redis
       port: 6379
       targetPort: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: producer
+  labels:
+    app: event-driven-system
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"producer:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"producer\")].image"}]'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-driven-system
+      component: producer
+  template:
+    metadata:
+      labels:
+        app: event-driven-system
+        component: producer
+    spec:
+      containers:
+        - name: producer
+          image: producer:latest
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: producer
+  labels:
+    app: event-driven-system
+spec:
+  type: ClusterIP
+  selector:
+    app: event-driven-system
+    component: producer
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: producer
+  labels:
+    app: event-driven-system
+spec:
+  to:
+    kind: Service
+    name: producer
+    weight: 100
+  port:
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consumer
+  labels:
+    app: event-driven-system
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"consumer:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"consumer\")].image"}]'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-driven-system
+      component: consumer
+  template:
+    metadata:
+      labels:
+        app: event-driven-system
+        component: consumer
+    spec:
+      containers:
+        - name: consumer
+          image: consumer:latest
+          env:
+            - name: REDIS_URL
+              value: redis://redis:6379/0

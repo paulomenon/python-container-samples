@@ -1,13 +1,45 @@
-# Apply to your OpenShift project, for example:
-#   oc project <your-namespace>
+# Deploy with:
+#   oc new-project python-samples    (if needed)
 #   oc apply -f redis-cache-service.yml
-# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+#   oc start-build redis-cache-service    (for each service that needs building)
+#   oc get builds                    (watch build progress)
+#   oc get route                     (get the URL)
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: redis-cache-service
+  labels:
+    app: redis-cache-service
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: redis-cache-service
+  labels:
+    app: redis-cache-service
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/redis-cache-service
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: redis-cache-service:latest
+  triggers:
+    - type: ConfigChange
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  # namespace: <your-namespace>
   labels:
     app: redis-cache-service
 spec:
@@ -33,7 +65,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  # namespace: <your-namespace>
   labels:
     app: redis-cache-service
 spec:
@@ -50,9 +81,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis-cache-service
-  # namespace: <your-namespace>
   labels:
     app: redis-cache-service
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"redis-cache-service:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"redis-cache-service\")].image"}]'
 spec:
   replicas: 1
   selector:
@@ -79,7 +111,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis-cache-service
-  # namespace: <your-namespace>
   labels:
     app: redis-cache-service
 spec:
@@ -96,7 +127,6 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: redis-cache-service
-  # namespace: <your-namespace>
   labels:
     app: redis-cache-service
 spec:

@@ -1,13 +1,45 @@
-# Apply to your OpenShift project, for example:
-#   oc project <your-namespace>
-#   oc apply -f auth-service-jwt.yml
-# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+# Deploy with:
+#   oc new-project python-samples    (if needed)
+#   oc apply -f <filename>.yml
+#   oc start-build <app-name>        (trigger the first build)
+#   oc get builds                    (watch build progress)
+#   oc get route <app-name>          (get the URL)
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: auth-service-jwt
+  labels:
+    app: auth-service-jwt
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: auth-service-jwt
+  labels:
+    app: auth-service-jwt
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/auth-service-jwt
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: auth-service-jwt:latest
+  triggers:
+    - type: ConfigChange
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: auth-service-jwt
-  # namespace: <your-namespace>
   labels:
     app: auth-service-jwt
 spec:
@@ -19,10 +51,13 @@ spec:
     metadata:
       labels:
         app: auth-service-jwt
+      annotations:
+        image.openshift.io/triggers: >-
+          [{"from":{"kind":"ImageStreamTag","name":"auth-service-jwt:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"auth-service-jwt\")].image"}]
     spec:
       containers:
         - name: auth-service-jwt
-          image: auth-service-jwt:latest
+          image: image-registry.openshift-image-registry.svc:5000/python-samples/auth-service-jwt:latest
           ports:
             - name: http
               containerPort: 8000
@@ -31,7 +66,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: auth-service-jwt
-  # namespace: <your-namespace>
   labels:
     app: auth-service-jwt
 spec:
@@ -47,7 +81,6 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: auth-service-jwt
-  # namespace: <your-namespace>
   labels:
     app: auth-service-jwt
 spec:

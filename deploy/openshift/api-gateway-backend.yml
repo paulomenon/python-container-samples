@@ -1,15 +1,113 @@
-# Apply to your OpenShift project, for example:
-#   oc project <your-namespace>
+# Deploy with:
+#   oc new-project python-samples    (if needed)
 #   oc apply -f api-gateway-backend.yml
-# Or set metadata.namespace on each resource (uncomment and replace placeholder).
+#   oc start-build gateway
+#   oc start-build backend-users
+#   oc start-build backend-products
+#   oc get builds                    (watch build progress)
+#   oc get route                     (get the URL)
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: gateway
+  labels:
+    app: api-gateway-backend
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: backend-users
+  labels:
+    app: api-gateway-backend
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: backend-products
+  labels:
+    app: api-gateway-backend
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: gateway
+  labels:
+    app: api-gateway-backend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/api-gateway-backend/gateway
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: gateway:latest
+  triggers:
+    - type: ConfigChange
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: backend-users
+  labels:
+    app: api-gateway-backend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/api-gateway-backend/backend-users
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: backend-users:latest
+  triggers:
+    - type: ConfigChange
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: backend-products
+  labels:
+    app: api-gateway-backend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/paulomenon/python-container-samples.git
+      ref: main
+    contextDir: apps/api-gateway-backend/backend-products
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: backend-products:latest
+  triggers:
+    - type: ConfigChange
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gateway
-  # namespace: <your-namespace>
   labels:
     app: api-gateway-backend
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"gateway:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"gateway\")].image"}]'
 spec:
   replicas: 1
   selector:
@@ -38,7 +136,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: gateway
-  # namespace: <your-namespace>
   labels:
     app: api-gateway-backend
 spec:
@@ -55,7 +152,6 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: gateway
-  # namespace: <your-namespace>
   labels:
     app: api-gateway-backend
 spec:
@@ -70,9 +166,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-users
-  # namespace: <your-namespace>
   labels:
     app: api-gateway-backend
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"backend-users:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"backend-users\")].image"}]'
 spec:
   replicas: 1
   selector:
@@ -96,7 +193,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: backend-users
-  # namespace: <your-namespace>
   labels:
     app: api-gateway-backend
 spec:
@@ -113,9 +209,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-products
-  # namespace: <your-namespace>
   labels:
     app: api-gateway-backend
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"backend-products:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"backend-products\")].image"}]'
 spec:
   replicas: 1
   selector:
@@ -139,7 +236,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: backend-products
-  # namespace: <your-namespace>
   labels:
     app: api-gateway-backend
 spec:
